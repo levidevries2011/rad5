@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Wheel of Names met Geheime Koppels</title>
+  <style>
+    /* Algemeen */
+    body {
+      background: #fff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { margin: 2rem 0 1rem; }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background-color: #007acc;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+      transition: background-color 0.2s;
+    }
+    .btn:hover { background-color: #005fa3; }
+    .hidden { display: none; }
+
+    /* Page containers */
+    #page1, #page2 {
+      width: 100%;
+      max-width: 600px;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+
+    /* Input & list */
+    input[type="text"] {
+      width: calc(100% - 2rem);
+      padding: 0.5rem;
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    #namesList ul { list-style: none; padding: 0; }
+    #namesList li { padding: 0.25rem 0; }
+
+    /* Wheel */
+    #pointer {
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 30px solid #e74c3c;
+      margin-top: 1rem;
+    }
+    canvas {
+      background: #f0f8ff;
+      border-radius: 50%;
+      margin: 1rem 0;
+    }
+    #result {
+      margin-top: 1rem;
+      font-size: 1.25rem;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PAGINA 1 -->
+  <div id="page1">
+    <h1>Stap 1: Namen & Geheime koppels</h1>
+    <input type="text" id="nameInput" placeholder="Naam toevoegen">
+    <button class="btn" onclick="addName()">Toevoegen</button>
+    <div id="namesList"></div>
+
+    <button class="btn" onclick="showPairingOptions()">Kies geheime koppels</button>
+    <div id="pairings" class="hidden"></div>
+
+    <button class="btn hidden" id="nextBtn" onclick="goToPage2()">Volgende →</button>
+  </div>
+
+  <!-- PAGINA 2 -->
+  <div id="page2" class="hidden">
+    <h1>Stap 2: Draai het rad</h1>
+    <div id="pointer"></div>
+    <canvas id="wheel" width="500" height="500"></canvas>
+    <button class="btn" onclick="spinWheel()">Spin!</button>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const names = [];
+    const secretPairs = new Map();
+    const drawn = new Set();
+    const colors = ["#ff9999","#99ff99","#9999ff","#ffcc99","#cc99ff"];
+
+    function addName() {
+      const inp = document.getElementById('nameInput');
+      const n = inp.value.trim();
+      if(n && !names.includes(n)) {
+        names.push(n);
+        inp.value = '';
+        renderNames();
+      }
+    }
+    function renderNames() {
+      document.getElementById('namesList').innerHTML =
+        '<ul>' + names.map(n => `<li>${n}</li>`).join('') + '</ul>';
+    }
+    function showPairingOptions() {
+      if(names.length < 2) return alert('Minstens 2 personen nodig');
+      const div = document.getElementById('pairings');
+      div.innerHTML = '';
+      names.forEach(n=>{
+        const sel = document.createElement('select');
+        sel.id = 'pair-'+n;
+        sel.innerHTML = `<option value="">Partner voor ${n}</option>` +
+          names.filter(x=>x!==n).map(x=>`<option>${x}</option>`).join('');
+        div.appendChild(sel);
+      });
+      div.classList.remove('hidden');
+      document.getElementById('nextBtn').classList.remove('hidden');
+    }
+
+    function goToPage2() {
+      names.forEach(n=>{
+        const p = document.getElementById('pair-'+n).value;
+        if(p) secretPairs.set(n,p);
+      });
+      document.getElementById('page1').classList.add('hidden');
+      document.getElementById('page2').classList.remove('hidden');
+      drawWheel();
+    }
+
+    // Wheel setup
+    let angle=0;
+    const canvas = document.getElementById('wheel');
+    const ctx = canvas.getContext('2d');
+    function drawWheel() {
+      const pool = names.filter(n=>!drawn.has(n));
+      const step = 2*Math.PI/pool.length;
+      ctx.clearRect(0,0,500,500);
+      pool.forEach((n,i)=>{
+        const a0 = i*step+angle;
+        const a1 = a0+step;
+        ctx.beginPath();
+        ctx.moveTo(250,250);
+        ctx.arc(250,250,250,a0,a1);
+        ctx.fillStyle = colors[i%colors.length];
+        ctx.fill();
+        ctx.save();
+        ctx.translate(250,250);
+        ctx.rotate(a0+step/2);
+        ctx.textAlign='right';
+        ctx.fillStyle='#000';
+        ctx.font='16px Arial';
+        ctx.fillText(n,240,0);
+        ctx.restore();
+      });
+    }
+
+    let nextPartner=null;
+    function spinWheel(){
+      const pool = names.filter(n=>!drawn.has(n));
+      if(pool.length===0) return alert('Alles gekozen');
+      let pick;
+      if(nextPartner){
+        pick = nextPartner;
+        nextPartner = null;
+      } else {
+        pick = pool[Math.floor(Math.random()*pool.length)];
+        const p = secretPairs.get(pick);
+        if(p && !drawn.has(p)) nextPartner = p;
+      }
+      const idx = pool.indexOf(pick);
+      const step = 2*Math.PI/pool.length;
+      const target = 2*Math.PI - (idx*step + step/2);
+      const spins = 4 + Math.floor(Math.random()*3);
+      const total = spins*2*Math.PI + target;
+      const dur = 3000, start = performance.now();
+      function animate(t){
+        const prog = Math.min((t-start)/dur,1);
+        const ease = 1 - Math.pow(1-prog,3);
+        angle = total*ease;
+        drawWheel();
+        if(prog<1) requestAnimationFrame(animate);
+        else {
+          drawn.add(pick);
+          document.getElementById('result').innerHTML = `<strong>${pick}</strong> is gekozen!`;
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+  </script>
+</body>
+</html>
